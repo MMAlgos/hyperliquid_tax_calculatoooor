@@ -1,3 +1,4 @@
+📌 Prompt (für Python 3.12 Streamlit-App mit APIs)
 Erstelle ein Python-3.12 Programm mit Benutzeroberfläche (Streamlit).
 
 Ziel:
@@ -7,7 +8,32 @@ Ziel:
 - Rechne ALLE realisierten Gewinne/Verluste/Fees/Funding zum Tageskurs in EUR um.
 - Erfasse Einzahlungen (EUR).
 - Weise unrealisierte PnL offener Positionen in EUR separat aus (Info, nicht steuerrelevant).
-- Erstelle CSV/Excel-Reports und Visualisierungen.
+- Erstelle CSV/Excel/PDF-Reports, Visualisierungen und eine Steuer-Checkliste.
+
+---
+
+### Relevante APIs
+
+**Hyperliquid API (Trading-Daten)**
+- API-Doku: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api
+- Python SDK: https://github.com/hyperliquid-dex/hyperliquid-python-sdk
+- Wichtige Endpunkte:
+  - `user_fills` → Realisierte Trades inkl. Fees
+  - `user_funding` → Funding Payments
+  - `open_positions` → Offene Positionen (unrealisierte PnL, Info)
+  - `transfers` (optional) → Ein-/Auszahlungen
+- Authentifizierung: API-Key / Secret
+- Rate-Limit beachten (429 → Retry-After, sonst Exponential Backoff + Jitter).
+
+**EZB Data Portal (USD→EUR Kurse)**
+- API-Doku: https://data.ecb.europa.eu/help/api/overview
+- Datensatz: `EXR/D.USD.EUR.SP00.A` = USD zu EUR, Tageskurs
+- Beispiel-Endpunkt:
+
+
+https://data.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?format=csvdata&startPeriod=2025-01-01&endPeriod=2025-12-31
+
+- Fallback: CSV-Upload mit Spalten `date, usd_eur`.
 
 ---
 
@@ -15,91 +41,79 @@ Ziel:
 
 **Technik**
 - Python 3.12
-- Libraries: requests, pandas, python-dateutil, openpyxl, streamlit, plotly oder matplotlib, tqdm, tenacity (oder eigener Backoff), typing.
-- Saubere Modulstruktur: ui.py, hyperliquid_api.py, rates.py, conversion.py, reports.py, main.py.
-- Konfig via UI (kein CLI). Keys via Eingabefeld oder ENV (HYPERLIQUID_KEY, HYPERLIQUID_SECRET).
-
-**Hyperliquid-API**
-- Endpunkte (Platzhalter, an echte API-Doku anpassen):
-  - Fills/Executions (realisierte Trades + Fees pro Fill)
-  - Funding Payments (alle paar Stunden)
-  - Open Positions (mit size, entry price, mark price)
-  - (Optional) Transfers/Deposits/Withdrawals
-- Pagination sauber verarbeiten.
-- Rate-Limit beachten:
-  - HTTP 429: Retry-After respektieren; sonst exponentieller Backoff mit Jitter.
-  - Retries auch bei 5xx/Timeouts.
-  - Globale Request-Budgetierung (Token Bucket, z. B. 5–10 req/s).
-- Caching (lokal JSON in .cache) für wiederholte Abrufe.
-
-**Zeiten & Kurse**
-- Alle Timestamps → nach Europe/Vienna konvertieren.
-- EZB USD→EUR Tageskurs laden (ECB SDW) oder CSV-Upload.
-- USDC = USD (1:1).
-- Umrechnung: amount_eur = amount_usdc * usd_eur_rate_of_day.
+- Libraries: requests, pandas, python-dateutil, openpyxl, streamlit, plotly, fpdf2 oder reportlab (für PDF), tqdm, tenacity (oder eigener Backoff), typing.
+- Modulstruktur: ui.py, hyperliquid_api.py, rates.py, conversion.py, reports.py, main.py.
+- Keys via UI-Eingabefeld oder ENV (HYPERLIQUID_KEY, HYPERLIQUID_SECRET).
+- Rate-Limit-Handling: Token Bucket, Retry-After, Backoff + Jitter.
+- Caching von API-Antworten (.cache).
 
 **Datenkategorien**
 - Realisierte: gain, loss, fee, funding_fee.
 - Cash-Flows: deposit (EUR-Einzahlungen), withdrawal.
-- Offene Positionen: separat (nicht steuerrelevant); berechne unrealisierte PnL in USDC und EUR zum Tageskurs.
+- Offene Positionen: unrealisierte PnL in EUR (Info).
 
 **Einzahlungen**
-- Variante A: Nutzer gibt im UI EUR-Einzahlungen (Datum + Betrag) an.
-- Variante B: CSV-Upload (`timestamp, eur_amount`).
-- Option: „Am Einzahlungstag in USDC getauscht“ → dokumentiere USDC-Wert.
+- Eingabe im UI oder CSV-Upload.
+- Option: „Am Einzahlungstag in USDC getauscht“ → USDC-Wert dokumentieren.
 
 **Berechnung**
-- Realisierter Netto-Trading-Erfolg (EUR) = (Summe gain − Summe loss) − (Summe fee + Summe funding_fee).
-- Funding Fees: jede Buchung zum Tageskurs umrechnen; zusätzlich Aggregat pro Datum berechnen.
-- Offene Positionen: unrealisierte PnL in EUR getrennt ausweisen.
+- Netto-Trading-Ergebnis (EUR) = (Summe gain − Summe loss) − (Summe fee + Summe funding_fee).
+- Funding Fees: jede Buchung zum Tageskurs in EUR; Summen je Tag.
+- Offene Positionen: unrealisierte PnL in EUR separat.
 
 ---
 
 ### UI-Funktionen (Streamlit)
 
-- Uploads:
-  - CSV für Trades oder EZB-Rates.
-- Eingaben:
-  - API-Key/Secret
-  - Zeitraum (Start/Enddatum)
-  - Einzahlungen (manuell oder CSV)
-- Checkboxen zum Anhaken:
-  - Realisierte Gewinne/Verluste anzeigen
-  - Fees und Funding einbeziehen
-  - Offene Positionen anzeigen
-  - Equity vs. Invested anzeigen
-- Tabellen-Ansichten:
-  - Alle Transaktionen in EUR
-  - Summenübersicht
+- Uploads: CSV für Trades oder EZB-Rates.
+- Eingaben: API-Key/Secret, Zeitraum, Einzahlungen.
+- Checkboxen:
+- Realisierte Gewinne/Verluste
+- Fees & Funding
+- Offene Positionen
+- Equity vs. Invested
+- Steuersimulation
+- Benchmark-Vergleich
+- Tabellen: Transaktionen in EUR, Summenübersicht.
 - Diagramme:
-  - PnL-Zeitreihe (kumuliert in EUR)
-  - Equity vs. Invested (Linienchart)
-- Export-Buttons:
-  - CSV und Excel (mehrere Sheets: Summary, Trades, Fees, Funding, Deposits, OpenPositions)
+- PnL-Zeitreihe (kumuliert in EUR)
+- Equity vs. Invested
+- Kapitalbasis-Diagramm
+- Drawdown
+- Statistiken:
+- Winrate
+- Durchschnittlicher Gewinn/Verlust
+- Verlustverrechnung
+- Steuersimulation:
+- Eingabe Normales Gehalt
+- Ausgabe Steuerlast nach österr. Tarif
+- Benchmark:
+- Vergleich mit BTC Buy & Hold.
 
 ---
 
-### Output (CSV + Excel)
+### Output
 
-- transactions_eur.csv – alle normalisierten Transaktionen
-- summary_eur.csv – Summen je Kategorie
-- report.xlsx – Sheets:
-  - Summary (alle Kennzahlen + unrealisierte PnL + Hinweise)
-  - Trades
-  - Fees
-  - Funding (inkl. Pivot je Datum)
-  - Deposits
-  - OpenPositions (mit Unrealized_PnL_EUR)
-- Excel-Formatierung: Header fett, Tausendertrennzeichen, 2 Dezimalstellen, Auto-Filter.
+- CSV/Excel:
+- transactions_eur.csv
+- summary_eur.csv
+- report.xlsx (Sheets: Summary, Trades, Fees, Funding, Deposits, OpenPositions)
+- PDF-Report:
+- Kompakte Version für Steuerberater (Summen, Tabellen, Charts).
+- Steuer-Checkliste:
+- Fertige Übersicht für Formular E1/E1kv.
 
 ---
 
 ### Akzeptanzkriterien
 
 - Trennung realisierte (steuerrelevant) und unrealisierte (Info).
-- Nutzt EZB-Tageskurse je Transaktionsdatum; USDC=USD.
-- Erstellt report.xlsx, transactions_eur.csv, summary_eur.csv.
-- Sheet OpenPositions mit Unrealized_PnL_EUR vorhanden.
-- Rate-Limit-sicher (429-Handling, Backoff, Jitter).
-- Zeitzone Europe/Vienna korrekt angewendet.
-- UI performant auch für ≥ 2.000 Trades.
+- Verlustverrechnung enthalten.
+- Steuersimulation nach österr. Tarif korrekt.
+- Kapitalbasis- und Drawdown-Diagramme vorhanden.
+- Winrate/Statistik berechnet.
+- Benchmark-Vergleich integriert.
+- Export in CSV, Excel und PDF funktioniert.
+- OpenPositions mit Unrealized_PnL_EUR.
+- UI performant für ≥ 2.000 Trades.
+- Zeitzone Europe/Vienna korrekt.
