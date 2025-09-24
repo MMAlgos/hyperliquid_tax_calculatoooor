@@ -1,4 +1,4 @@
-Erstelle ein Python-3.12 Programm mit Benutzeroberfläche (Streamlit).
+Erstelle eine Web APP js + react
 
 Ziel:
 
@@ -37,11 +37,19 @@ Ziel:
 
 **Technik & Speicherung**
 
-- Python 3.12
-- Bibliotheken: requests, pandas, python-dateutil, openpyxl, streamlit, plotly/matplotlib, fpdf2 oder reportlab (für PDF), sqlite3 (oder SQLAlchemy), tenacity (oder eigener Backoff), typing.
-- Modulstruktur: ui.py, explorer_api.py, hyperliquid_info.py, rates.py, conversion.py, db.py, reports.py, main.py.
-- Datenbank (z. B. SQLite) mit Tabellen:
-  - `wallet_fetch_log` (wallet_address, last_fetched_timestamp)
+**Technik & Speicherung**
+
+* Frontend: React (mit Next.js oder Create React App), TypeScript, TailwindCSS + shadcn/ui für UI-Komponenten.
+* State-Management: React Query oder Zustand.
+* Diagramme: Recharts oder Chart.js.
+* Backend/API: Next.js API Routes (Node.js 18+).
+* Datenbank/Cache: PostgreSQL (Prisma ORM) oder SQLite (lokal).
+* Exporte:
+  * CSV/Excel mit SheetJS (xlsx).
+  * PDF mit pdfkit oder Puppeteer (HTML→PDF).
+  * Datenbank (z. B. SQLite) mit Tabellen:
+
+- - `wallet_fetch_log` (wallet_address, last_fetched_timestamp)
   - `transactions` (wallet_address, tx_hash, category, amount_usdc, timestamp, etc.)
   - `funding` (wallet_address, funding_id, amount_usdc, timestamp)
   - `rates` (date, usd_eur)
@@ -109,13 +117,98 @@ Ziel:
 **Output**
 
 - CSVs & Excel:
+
   - transactions_eur.csv
   - summary_eur.csv
   - report.xlsx (Summary, Trades, Fees, Funding, Deposits, OpenPositions)
 - PDF-Report:
+
   - Kompakte Version für Steuerberater (Summen, Tabellen, Charts)
 - Steuer-Checkliste:
+
   - Fertige Übersicht für Formular E1/E1kv
+  - 
+
+  ➕ Ergänzung zum Prompt:
+
+  - Füge in der Streamlit-UI einen **Knopf** hinzu, mit dem der User entscheiden kann, ob eine neue Wallet-Adresse in die Datenbank gespeichert werden soll (z. B. Checkbox oder Button „Wallet speichern?“).
+  - Wenn der User NEIN auswählt → keine Speicherung in `wallet_fetch_log`.
+
+  ## **1. HYPERLIQUID INFO API** (https://api.hyperliquid.xyz/info)
+
+  *Primary API for trading and financial data*
+
+  ### 📊 **API Call 1: User Fills**
+
+
+  - **Endpoint**: POST /info
+  - **Request Type**: "userFills"
+  - **Purpose**: Get all executed trades (buy/sell orders that were filled)
+  - **What We Fetch**:
+    - ✅ Trade executions (buy/sell orders)
+    - ✅ Realized P&L (profit/loss from closed positions)
+    - ✅ Trading fees (maker/taker fees)
+    - ✅ Trade timestamps (when trades executed)
+    - ✅ Symbol/coin (ETH, BTC, etc.)
+    - ✅ Trade size and price
+    - ✅ Trade ID (unique identifier)
+      **Austrian Tax Impact**: 🇦🇹 Realized gains/losses are TAXABLE income
+
+  ### 💰 **API Call 2: User Funding**
+
+  - **Endpoint**: POST /info
+  - **Request Type**: "userFunding"
+  - **Purpose**: Get funding rate payments (perpetual futures funding)
+  - **What We Fetch**:
+    - ✅ Funding payments (money paid/received for holding positions)
+    - ✅ Funding rates (the actual rate applied)
+    - ✅ Position sizes (how much crypto you held)
+    - ✅ Funding timestamps (when funding was applied)
+    - ✅ Symbol/coin (which crypto generated funding)
+      **Austrian Tax Impact**: 🇦🇹 Funding payments are TAXABLE income
+
+  ### 💳 **API Call 3: User Non-Funding Ledger Updates**
+
+  - **Endpoint**: POST /info
+  - **Request Type**: "userNonFundingLedgerUpdates"
+  - **Purpose**: Get deposits, withdrawals, and other ledger changes
+  - **What We Fetch**:
+    - ✅ Deposits (money added to account)
+    - ✅ Withdrawals (money taken from account)
+    - ✅ Transfer fees (fees for deposits/withdrawals)
+    - ✅ Transaction hashes (blockchain identifiers)
+    - ✅ Destination addresses (for withdrawals)
+      **Austrian Tax Impact**: 🇦🇹 Deposits are NOT taxable, withdrawals tracked for cost basis
+
+  ### 📈 **API Call 4: Portfolio/Clearinghouse State**
+
+  - **Endpoint**: POST /info
+  - **Request Type**: "clearinghouseState"
+  - **Purpose**: Get current open positions and account state
+  - **What We Fetch**:
+    - ✅ Open positions (currently held positions)
+    - ✅ Unrealized P&L (profit/loss on open positions)
+    - ✅ Position sizes and entry prices
+    - ✅ Mark prices (current market values)
+    - ✅ Account balances
+      **Austrian Tax Impact**: 🇦🇹 Unrealized P&L NOT taxable until realized
+
+  ---
+
+  ## 💱 **2. EXCHANGE RATES API** (https://api.exchangerate.host)
+
+  *For EUR conversion (Austrian tax compliance)*
+
+  ### 🇪🇺 **API Call 5: USD/EUR Exchange Rates**
+
+  - **Endpoint**: GET /historical?base=USD&symbols=EUR&date=YYYY-MM-DD
+  - **Purpose**: Get historical EUR exchange rates for tax calculations
+  - **What We Fetch**:
+    - ✅ Daily EUR exchange rates (for each transaction date)
+    - ✅ Historical rate data (to convert old transactions)
+    - ✅ Current rates (for recent transactions)
+      **Austrian Tax Impact**: 🇦🇹 REQUIRED for Austrian tax reporting in EUR
+  - 
 
 ---
 

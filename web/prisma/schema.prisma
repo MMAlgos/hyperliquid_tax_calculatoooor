@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model WalletFetchLog {
+  id             Int      @id @default(autoincrement())
+  walletAddress  String
+  lastFetchedAt  DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@index([walletAddress])
+}
+
+model Transaction {
+  id            Int      @id @default(autoincrement())
+  walletAddress String
+  txHash        String
+  category      String   // gain, loss, fee, funding_fee, deposit, withdrawal
+  symbol        String?
+  amountUSDC    Float
+  amountEUR     Float
+  timestamp     DateTime
+  meta          String?
+  createdAt     DateTime @default(now())
+  @@index([walletAddress, timestamp])
+  @@unique([walletAddress, txHash])
+}
+
+model Funding {
+  id            Int      @id @default(autoincrement())
+  walletAddress String
+  fundingId     String
+  amountUSDC    Float
+  amountEUR     Float
+  symbol        String?
+  timestamp     DateTime
+  createdAt     DateTime @default(now())
+  @@index([walletAddress, timestamp])
+  @@unique([walletAddress, fundingId])
+}
+
+model Rate {
+  id       Int      @id @default(autoincrement())
+  date     DateTime @unique // day in UTC
+  usdEur   Float
+  createdAt DateTime @default(now())
+}
+
+model OpenPosition {
+  id            Int      @id @default(autoincrement())
+  walletAddress String
+  symbol        String
+  size          Float
+  entryPrice    Float
+  markPrice     Float
+  unrealizedPnlUSDC Float
+  unrealizedPnlEUR  Float
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  @@index([walletAddress, symbol])
+  @@unique([walletAddress, symbol])
+}
+
+model TaxBracket {
+  id           Int    @id @default(autoincrement())
+  year         Int
+  incomeLimit  Float
+  ratePercent  Float
+  @@index([year])
+}
