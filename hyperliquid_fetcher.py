@@ -37,48 +37,140 @@ class HyperliquidFetcher:
     
     def get_user_fills(self, start_time: Optional[int] = None, end_time: Optional[int] = None) -> List[Dict[str, Any]]:
         """
-        Fetch user fills (trade history)
-        Returns at most 2000 fills per request, only 10000 most recent available
+        Fetch user fills (trade history) with pagination
+        Fetches ALL available trades by making multiple requests if needed
         """
-        print("📊 Fetching trade history...")
+        print("📊 Fetching trade history (with pagination)...")
         
         if start_time or end_time:
-            payload = {
-                "type": "userFillsByTime",
-                "user": self.wallet_address,
-                "startTime": start_time or 0,
-                "endTime": end_time or int(time.time() * 1000),
-                "aggregateByTime": False
-            }
+            return self._fetch_fills_by_time(start_time or 0, end_time or int(time.time() * 1000))
         else:
+            # First try the regular userFills endpoint
             payload = {
                 "type": "userFills",
                 "user": self.wallet_address,
                 "aggregateByTime": False
             }
-        
-        result = self._make_request(payload)
-        if result:
-            print(f"✅ Retrieved {len(result)} trade fills")
-            return result
-        return []
+            
+            result = self._make_request(payload)
+            if result and isinstance(result, list):
+                print(f"✅ Retrieved {len(result)} recent trade fills")
+                
+                # If we got exactly 2000, there might be more - fetch all historical data
+                if len(result) >= 2000:
+                    print("🔄 Detected potential pagination limit - fetching complete history...")
+                    all_fills = self._fetch_all_fills()
+                    print(f"✅ Retrieved {len(all_fills)} total trade fills (complete history)")
+                    return all_fills
+                
+                return result
+            return []
     
-    def get_user_funding(self, start_time: Optional[int] = None, end_time: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Fetch user funding history"""
-        print("💰 Fetching funding history...")
+    def _fetch_all_fills(self) -> List[Dict[str, Any]]:
+        """Fetch ALL user fills using time-based pagination"""
+        all_fills = []
         
+        # Start from 2 years ago to ensure we get everything
+        current_time = int(time.time() * 1000)
+        start_time = current_time - (2 * 365 * 24 * 60 * 60 * 1000)  # 2 years ago
+        chunk_size = 30 * 24 * 60 * 60 * 1000  # 30 days in milliseconds
+        
+        while start_time < current_time:
+            chunk_end = min(start_time + chunk_size, current_time)
+            
+            print(f"📥 Fetching trades from {datetime.fromtimestamp(start_time/1000).strftime('%Y-%m-%d')} to {datetime.fromtimestamp(chunk_end/1000).strftime('%Y-%m-%d')}")
+            
+            chunk_fills = self._fetch_fills_by_time(start_time, chunk_end)
+            if chunk_fills:
+                all_fills.extend(chunk_fills)
+                print(f"   📊 Found {len(chunk_fills)} trades in this period")
+            
+            start_time = chunk_end + 1
+            time.sleep(0.1)  # Rate limiting
+        
+        # Remove duplicates based on transaction hash and keep most recent
+        seen_hashes = set()
+        unique_fills = []
+        for fill in reversed(all_fills):  # Reverse to keep most recent duplicates
+            tx_hash = fill.get('tx', {}).get('hash', '')
+            if tx_hash and tx_hash not in seen_hashes:
+                seen_hashes.add(tx_hash)
+                unique_fills.append(fill)
+        
+        return list(reversed(unique_fills))  # Return in chronological order
+    
+    def _fetch_fills_by_time(self, start_time: int, end_time: int) -> List[Dict[str, Any]]:
+        """Fetch fills for a specific time range"""
         payload = {
-            "type": "userFunding",
+            "type": "userFillsByTime", 
             "user": self.wallet_address,
-            "startTime": start_time or 0,
-            "endTime": end_time or int(time.time() * 1000)
+            "startTime": start_time,
+            "endTime": end_time,
+            "aggregateByTime": False
         }
         
         result = self._make_request(payload)
-        if result:
-            print(f"✅ Retrieved {len(result)} funding records")
-            return result
-        return []
+        return result if result and isinstance(result, list) else []
+    
+    def get_user_funding(self, start_time: Optional[int] = None, end_time: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Fetch user funding history with pagination support"""
+        print("💰 Fetching funding history (with pagination)...")
+        
+        if start_time or end_time:
+            return self._fetch_funding_by_time(start_time or 0, end_time or int(time.time() * 1000))
+        else:
+            # Try to fetch all funding records using pagination
+            all_funding = self._fetch_all_funding()
+            return all_funding
+    
+    def _fetch_all_funding(self) -> List[Dict[str, Any]]:
+        """Fetch ALL user funding using time-based pagination"""
+        all_funding = []
+        
+        # Start from 2 years ago to ensure we get everything
+        current_time = int(time.time() * 1000)
+        start_time = current_time - (2 * 365 * 24 * 60 * 60 * 1000)  # 2 years ago
+        chunk_size = 30 * 24 * 60 * 60 * 1000  # 30 days in milliseconds
+        
+        total_fetched = 0
+        while start_time < current_time:
+            chunk_end = min(start_time + chunk_size, current_time)
+            
+            print(f"📥 Fetching funding from {datetime.fromtimestamp(start_time/1000).strftime('%Y-%m-%d')} to {datetime.fromtimestamp(chunk_end/1000).strftime('%Y-%m-%d')}")
+            
+            chunk_funding = self._fetch_funding_by_time(start_time, chunk_end)
+            if chunk_funding:
+                all_funding.extend(chunk_funding)
+                total_fetched += len(chunk_funding)
+                print(f"   💰 Found {len(chunk_funding)} funding records in this period (total: {total_fetched})")
+            
+            start_time = chunk_end + 1
+            time.sleep(0.1)  # Rate limiting
+        
+        # Remove duplicates based on timestamp and funding payment
+        seen_records = set()
+        unique_funding = []
+        for fund in all_funding:
+            # Create a unique key from timestamp and payment amount
+            key = f"{fund.get('time', 0)}_{fund.get('delta', {}).get('usdc', 0)}"
+            if key not in seen_records:
+                seen_records.add(key)
+                unique_funding.append(fund)
+        
+        print(f"✅ Retrieved {len(unique_funding)} total funding records (complete history)")
+        return unique_funding
+    
+    def _fetch_funding_by_time(self, start_time: int, end_time: int) -> List[Dict[str, Any]]:
+        """Fetch funding for a specific time range"""
+        payload = {
+            "type": "userFunding",
+            "user": self.wallet_address,
+            "startTime": start_time,
+            "endTime": end_time
+        }
+        
+        result = self._make_request(payload)
+        return result if result and isinstance(result, list) else []
     
     def get_user_transfers(self, start_time: Optional[int] = None, end_time: Optional[int] = None) -> List[Dict[str, Any]]:
         """Fetch user non-funding ledger updates (deposits, withdrawals, transfers)"""
@@ -92,7 +184,7 @@ class HyperliquidFetcher:
         }
         
         result = self._make_request(payload)
-        if result:
+        if result and isinstance(result, list):
             print(f"✅ Retrieved {len(result)} transfer records")
             return result
         return []
@@ -122,7 +214,7 @@ class HyperliquidFetcher:
         }
         
         result = self._make_request(payload)
-        if result:
+        if result and isinstance(result, list):
             print(f"✅ Retrieved {len(result)} open orders")
             return result
         return []
