@@ -1,6 +1,7 @@
 """
-Hyperliquid Tax Calculator
+Hyperliquid Tax Calculator with EUR Support
 Fetches all trading data from Hyperliquid including trades, funding, transfers, and open positions
+Converts USD amounts to EUR using ECB exchange rates for German tax reporting
 """
 
 import requests
@@ -9,6 +10,7 @@ import pandas as pd
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 import time
+from currency_converter import CurrencyConverter, create_enhanced_summary_report
 
 class HyperliquidFetcher:
     """Class to fetch and process Hyperliquid trading data"""
@@ -380,16 +382,18 @@ def create_summary_report(wallet_address: str, trades_df: pd.DataFrame, funding_
     return report
 
 def main():
-    """Main function to run the Hyperliquid data fetcher"""
+    """Main function to run the Hyperliquid data fetcher with EUR conversion"""
     wallet_address = "0x2987F53372c02D1a4C67241aA1840C1E83c480fF"
     
-    print("🚀 Starting Hyperliquid Data Fetcher...")
+    print("🚀 Starting Hyperliquid Tax Calculator with EUR Support...")
     print(f"📊 Wallet Address: {wallet_address}")
+    print("🇪🇺 EUR conversions using ECB exchange rates")
     print("═" * 80)
     
-    # Initialize fetcher
+    # Initialize fetcher and converter
     fetcher = HyperliquidFetcher(wallet_address)
     processor = HyperliquidDataProcessor()
+    converter = CurrencyConverter()
     
     # Fetch all data
     try:
@@ -413,34 +417,65 @@ def main():
         open_orders = fetcher.get_open_orders()
         
         print("\n" + "═" * 80)
-        print("📊 DATA FETCHING COMPLETE!")
+        print("💱 CONVERTING USD TO EUR...")
         print("═" * 80)
         
-        # Create and display summary
-        summary = create_summary_report(wallet_address, trades_df, funding_df, transfers_df, account_state)
+        # Prepare EUR conversions
+        dataframes = [trades_df, funding_df, transfers_df]
+        converter.prepare_rates(dataframes)
+        
+        # Add EUR conversions to each dataframe
+        if not trades_df.empty:
+            print("💰 Converting trade data to EUR...")
+            trades_df = converter.add_eur_conversions(
+                trades_df, 
+                ['fee', 'closed_pnl']
+            )
+        
+        if not funding_df.empty:
+            print("� Converting funding data to EUR...")
+            funding_df = converter.add_eur_conversions(
+                funding_df, 
+                ['funding_payment']
+            )
+        
+        if not transfers_df.empty:
+            print("📤 Converting transfer data to EUR...")
+            transfers_df = converter.add_eur_conversions(
+                transfers_df, 
+                ['amount']
+            )
+        
+        print("\n" + "═" * 80)
+        print("�📊 DATA FETCHING & CONVERSION COMPLETE!")
+        print("═" * 80)
+        
+        # Create enhanced summary with EUR
+        from currency_converter import create_enhanced_summary_report
+        summary = create_enhanced_summary_report(wallet_address, trades_df, funding_df, transfers_df, account_state)
         print(summary)
         
-        # Save data to files
+        # Save data to files with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         if not trades_df.empty:
-            trades_df.to_csv(f'hyperliquid_trades_{timestamp}.csv', index=False)
-            print(f"💾 Trades saved to: hyperliquid_trades_{timestamp}.csv")
+            trades_df.to_csv(f'hyperliquid_trades_eur_{timestamp}.csv', index=False)
+            print(f"💾 Trades (USD/EUR) saved to: hyperliquid_trades_eur_{timestamp}.csv")
         
         if not funding_df.empty:
-            funding_df.to_csv(f'hyperliquid_funding_{timestamp}.csv', index=False)
-            print(f"💾 Funding saved to: hyperliquid_funding_{timestamp}.csv")
+            funding_df.to_csv(f'hyperliquid_funding_eur_{timestamp}.csv', index=False)
+            print(f"💾 Funding (USD/EUR) saved to: hyperliquid_funding_eur_{timestamp}.csv")
         
         if not transfers_df.empty:
-            transfers_df.to_csv(f'hyperliquid_transfers_{timestamp}.csv', index=False)
-            print(f"💾 Transfers saved to: hyperliquid_transfers_{timestamp}.csv")
+            transfers_df.to_csv(f'hyperliquid_transfers_eur_{timestamp}.csv', index=False)
+            print(f"💾 Transfers (USD/EUR) saved to: hyperliquid_transfers_eur_{timestamp}.csv")
         
-        # Save summary report
-        with open(f'hyperliquid_summary_{timestamp}.txt', 'w', encoding='utf-8') as f:
+        # Save enhanced summary report
+        with open(f'hyperliquid_tax_report_{timestamp}.txt', 'w', encoding='utf-8') as f:
             f.write(summary)
-        print(f"📄 Summary saved to: hyperliquid_summary_{timestamp}.txt")
+        print(f"📄 Tax Report saved to: hyperliquid_tax_report_{timestamp}.txt")
         
-        # Save raw JSON data
+        # Save complete data with EUR conversions
         all_data = {
             'wallet_address': wallet_address,
             'timestamp': timestamp,
@@ -448,14 +483,16 @@ def main():
             'funding': funding_data,
             'transfers': transfers_data,
             'account_state': account_data,
-            'open_orders': open_orders
+            'open_orders': open_orders,
+            'currency_conversion': 'EUR via ECB rates'
         }
         
-        with open(f'hyperliquid_raw_data_{timestamp}.json', 'w', encoding='utf-8') as f:
+        with open(f'hyperliquid_complete_data_eur_{timestamp}.json', 'w', encoding='utf-8') as f:
             json.dump(all_data, f, indent=2, default=str)
-        print(f"🗂️  Raw data saved to: hyperliquid_raw_data_{timestamp}.json")
+        print(f"🗂️  Complete data saved to: hyperliquid_complete_data_eur_{timestamp}.json")
         
-        print("\n✅ All data successfully fetched and saved!")
+        print("\n✅ Tax calculation complete! All data includes EUR conversions using ECB rates.")
+        print("🇩🇪 Files are ready for German tax reporting.")
         
     except Exception as e:
         print(f"❌ Error occurred: {e}")
