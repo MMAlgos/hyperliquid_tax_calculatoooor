@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 import time
 from currency_converter import CurrencyConverter, create_enhanced_summary_report
+from austrian_tax_report import AustrianTaxReportGenerator
 
 class HyperliquidFetcher:
     """Class to fetch and process Hyperliquid trading data"""
@@ -176,10 +177,12 @@ class HyperliquidDataProcessor:
         
         for fund in funding:
             delta = fund['delta']
+            funding_rate_raw = float(delta.get('fundingRate', 0))
             processed_fund = {
                 'timestamp': HyperliquidDataProcessor.timestamp_to_datetime(fund['time']),
                 'coin': delta['coin'],
-                'funding_rate': float(delta.get('fundingRate', 0)),
+                'funding_rate': funding_rate_raw,
+                'funding_rate_percent': f"{funding_rate_raw * 100:.4f}%",
                 'position_size': float(delta.get('szi', 0)),
                 'funding_payment': float(delta.get('usdc', 0)),
                 'type': delta.get('type', 'funding'),
@@ -381,8 +384,47 @@ def create_summary_report(wallet_address: str, trades_df: pd.DataFrame, funding_
     
     return report
 
+def get_user_input():
+    """Get user input for yearly income and tax year"""
+    print("\n" + "═" * 80)
+    print("🇦🇹 ÖSTERREICHISCHE STEUERBERECHNUNG - EINGABEN")
+    print("═" * 80)
+    
+    # Get yearly income
+    while True:
+        try:
+            yearly_income_input = input("💰 Ihr sonstiges Jahreseinkommen in EUR (0 wenn keines): €").strip()
+            yearly_income = float(yearly_income_input) if yearly_income_input else 0.0
+            if yearly_income >= 0:
+                break
+            else:
+                print("❌ Bitte geben Sie einen positiven Betrag ein.")
+        except ValueError:
+            print("❌ Bitte geben Sie eine gültige Zahl ein.")
+    
+    # Get tax year
+    while True:
+        try:
+            tax_year_input = input(f"📅 Steuerjahr ({datetime.now().year} für aktuelles Jahr): ").strip()
+            tax_year = int(tax_year_input) if tax_year_input else datetime.now().year
+            if 2020 <= tax_year <= 2030:
+                break
+            else:
+                print("❌ Bitte geben Sie ein Jahr zwischen 2020 und 2030 ein.")
+        except ValueError:
+            print("❌ Bitte geben Sie eine gültige Jahreszahl ein.")
+    
+    print(f"✅ Jahreseinkommen: €{yearly_income:,.2f}")
+    print(f"✅ Steuerjahr: {tax_year}")
+    
+    return yearly_income, tax_year
+
 def main():
     """Main function to run the Hyperliquid data fetcher with EUR conversion"""
+    
+    # Get user input for Austrian tax calculation
+    yearly_income, tax_year = get_user_input()
+    
     wallet_address = "0x2987F53372c02D1a4C67241aA1840C1E83c480fF"
     
     print("🚀 Starting Hyperliquid Tax Calculator with EUR Support...")
@@ -455,44 +497,27 @@ def main():
         summary = create_enhanced_summary_report(wallet_address, trades_df, funding_df, transfers_df, account_state)
         print(summary)
         
-        # Save data to files with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Generate Austrian Tax Report
+        print("\n" + "═" * 80)
+        print("🇦🇹 GENERATING AUSTRIAN TAX REPORT 2025...")
+        print("═" * 80)
         
-        if not trades_df.empty:
-            trades_df.to_csv(f'hyperliquid_trades_eur_{timestamp}.csv', index=False)
-            print(f"💾 Trades (USD/EUR) saved to: hyperliquid_trades_eur_{timestamp}.csv")
+        austrian_reporter = AustrianTaxReportGenerator(
+            wallet_address=wallet_address,
+            yearly_income=yearly_income,
+            tax_year=tax_year
+        )
+        zip_filename = austrian_reporter.generate_report_package(
+            trades_df=trades_df,
+            funding_df=funding_df,
+            transfers_df=transfers_df,
+            account_state=account_state,
+            base_filename=f"hyperliquid_austria_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
         
-        if not funding_df.empty:
-            funding_df.to_csv(f'hyperliquid_funding_eur_{timestamp}.csv', index=False)
-            print(f"💾 Funding (USD/EUR) saved to: hyperliquid_funding_eur_{timestamp}.csv")
-        
-        if not transfers_df.empty:
-            transfers_df.to_csv(f'hyperliquid_transfers_eur_{timestamp}.csv', index=False)
-            print(f"💾 Transfers (USD/EUR) saved to: hyperliquid_transfers_eur_{timestamp}.csv")
-        
-        # Save enhanced summary report
-        with open(f'hyperliquid_tax_report_{timestamp}.txt', 'w', encoding='utf-8') as f:
-            f.write(summary)
-        print(f"📄 Tax Report saved to: hyperliquid_tax_report_{timestamp}.txt")
-        
-        # Save complete data with EUR conversions
-        all_data = {
-            'wallet_address': wallet_address,
-            'timestamp': timestamp,
-            'trades': trades_data,
-            'funding': funding_data,
-            'transfers': transfers_data,
-            'account_state': account_data,
-            'open_orders': open_orders,
-            'currency_conversion': 'EUR via ECB rates'
-        }
-        
-        with open(f'hyperliquid_complete_data_eur_{timestamp}.json', 'w', encoding='utf-8') as f:
-            json.dump(all_data, f, indent=2, default=str)
-        print(f"🗂️  Complete data saved to: hyperliquid_complete_data_eur_{timestamp}.json")
-        
-        print("\n✅ Tax calculation complete! All data includes EUR conversions using ECB rates.")
-        print("🇩🇪 Files are ready for German tax reporting.")
+        print(f"\n✅ Austrian tax report generated successfully!")
+        print(f"� Complete report package: {zip_filename}")
+        print("🇦🇹 Report includes organized folders with CSVs and PDF tax calculation.")
         
     except Exception as e:
         print(f"❌ Error occurred: {e}")

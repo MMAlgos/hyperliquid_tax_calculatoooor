@@ -313,8 +313,9 @@ def create_enhanced_summary_report(wallet_address: str, trades_df: pd.DataFrame,
 ─────────────────────────────────────────────────────────────────────────────────
 🇪🇺 EUR conversions use ECB daily reference rates
 📅 Closed trades use exchange rate from closing date
-💸 All trading costs are tax-deductible in Germany
-📊 Realized PnL subject to tax after 1-year holding period rules
+🇦🇹 All trading costs are tax-deductible in Austria
+📊 Realized P&L subject to Austrian income tax (progressive rates)
+💼 No holding period requirements - all gains taxable as income
 
 📅 REPORT GENERATED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
 ╚══════════════════════════════════════════════════════════════════════════════════╝
