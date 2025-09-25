@@ -198,8 +198,11 @@ def create_enhanced_summary_report(wallet_address: str, trades_df: pd.DataFrame,
     total_fees_usd = abs(trades_df['fee'].sum()) if not trades_df.empty else 0
     total_fees_eur = abs(trades_df['fee_eur'].sum()) if not trades_df.empty and 'fee_eur' in trades_df.columns else 0
     
-    total_funding_usd = abs(funding_df['funding_payment'].sum()) if not funding_df.empty else 0
-    total_funding_eur = abs(funding_df['funding_payment_eur'].sum()) if not funding_df.empty and 'funding_payment_eur' in funding_df.columns else 0
+    # Separate funding paid and received
+    funding_paid_usd = abs(funding_df[funding_df['funding_payment'] < 0]['funding_payment'].sum()) if not funding_df.empty else 0
+    funding_received_usd = abs(funding_df[funding_df['funding_payment'] > 0]['funding_payment'].sum()) if not funding_df.empty else 0
+    funding_paid_eur = abs(funding_df[funding_df['funding_payment_eur'] < 0]['funding_payment_eur'].sum()) if not funding_df.empty and 'funding_payment_eur' in funding_df.columns else 0
+    funding_received_eur = abs(funding_df[funding_df['funding_payment_eur'] > 0]['funding_payment_eur'].sum()) if not funding_df.empty and 'funding_payment_eur' in funding_df.columns else 0
     
     total_pnl_usd = trades_df['closed_pnl'].sum() if not trades_df.empty else 0
     total_pnl_eur = trades_df['closed_pnl_eur'].sum() if not trades_df.empty and 'closed_pnl_eur' in trades_df.columns else 0
@@ -261,22 +264,28 @@ def create_enhanced_summary_report(wallet_address: str, trades_df: pd.DataFrame,
 
 💰 FUNDING HISTORY ({len(funding_df)} payments)
 ─────────────────────────────────────────────────────────────────────────────────
-💸 Total Funding Paid: ${total_funding_usd:,.4f} | €{total_funding_eur:,.4f}
+💸 Total Funding Paid: ${funding_paid_usd:,.4f} | €{funding_paid_eur:,.4f}
+💰 Total Funding Received: ${funding_received_usd:,.4f} | €{funding_received_eur:,.4f}
 📊 Assets with Funding: {funding_coins}"""
     else:
         report += "\n\n💰 FUNDING HISTORY\n─────────────────────────────────────────────────────────────────────────────────\n   No funding records found"
     
     # Combined costs summary with dual currency
-    total_costs_usd = total_fees_usd + total_funding_usd
-    total_costs_eur = total_fees_eur + total_funding_eur
+    total_deductible_costs_usd = total_fees_usd + funding_paid_usd
+    total_deductible_costs_eur = total_fees_eur + funding_paid_eur
+    net_trading_costs_usd = total_deductible_costs_usd - funding_received_usd
+    net_trading_costs_eur = total_deductible_costs_eur - funding_received_eur
     
     report += f"""
 
 💳 TOTAL COSTS BREAKDOWN (Tax Deductible)
 ─────────────────────────────────────────────────────────────────────────────────
 💸 Trading Fees: ${total_fees_usd:,.4f} | €{total_fees_eur:,.4f}
-🔄 Funding Costs: ${total_funding_usd:,.4f} | €{total_funding_eur:,.4f}
-💰 Combined Total: ${total_costs_usd:,.4f} | €{total_costs_eur:,.4f}"""
+🔄 Funding Paid (abzugsfähig): ${funding_paid_usd:,.4f} | €{funding_paid_eur:,.4f}
+💰 Funding Received (Ertrag): ${funding_received_usd:,.4f} | €{funding_received_eur:,.4f}
+
+� SUMME - Abzugsfähige Kosten: ${total_deductible_costs_usd:,.4f} | €{total_deductible_costs_eur:,.4f}
+📈 NETTO - Trading-Kosten (Kosten - Erträge): ${net_trading_costs_usd:,.4f} | €{net_trading_costs_eur:,.4f}"""
     
     # Transfer summary
     if not transfers_df.empty:

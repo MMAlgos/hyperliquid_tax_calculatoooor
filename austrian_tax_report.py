@@ -407,6 +407,9 @@ class AustrianTaxReportGenerator:
             ['Funding Paid (abzugsfähig)', f"€ {tax_summary['funding_paid_eur']:,.2f}"],
             ['Funding Received (Ertrag)', f"€ {tax_summary['funding_received_eur']:,.2f}"],
             ['', ''],  # Separator
+            ['SUMME - Abzugsfähige Kosten', f"€ {tax_summary['total_fees_eur'] + tax_summary['funding_paid_eur']:,.2f}"],
+            ['NETTO - Trading-Kosten (Kosten - Erträge)', f"€ {tax_summary['total_fees_eur'] + tax_summary['funding_paid_eur'] - tax_summary['funding_received_eur']:,.2f}"],
+            ['', ''],  # Separator
             ['Steuer nur auf Lohn', f"€ {tax_summary['tax_lohn_only']:,.2f}"],
             ['Zusatzsteuer durch Trading', f"€ {tax_summary['trading_tax']:,.2f}"],
             ['Steuer gesamt (Lohn + Trading)', f"€ {tax_summary['tax_with_trading']:,.2f}"]
