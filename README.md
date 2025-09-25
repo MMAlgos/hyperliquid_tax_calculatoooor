@@ -5,7 +5,7 @@
 ### 🎯 **Features Implemented**
 
 1. **ECB API Integration** - Real-time EUR/USD conversion with 101 cached exchange rates
-2. **Austrian Tax Law 2025** - Complete progressive tax brackets with corrected loss treatment  
+2. **Austrian Tax Law 2025** - Complete progressive tax brackets with corrected loss treatment
 3. **Separated Tax Display** - Shows Lohn-only vs Trading vs Combined tax calculations
 4. **Tax Form Guidance** - Generates detailed PDF instructions for Austrian Steuererklärung
 5. **User Input System** - Interactive input for wallet, yearly income, and tax year
@@ -28,18 +28,21 @@ python hyperliquid_fetcher.py
 - **Lohn-Einkommen**: Your yearly salary income in EUR (e.g., 50000)
 - **Tax Year**: The year for tax calculation (e.g., 2024)
 
-### �📊 **Generated Files**
+### 🀽� **Generated Files**
 
 #### CSV Files (Raw Data)
+
 - `trades_WALLET_YEAR.csv` - All trading transactions
 - `funding_WALLET_YEAR.csv` - Funding payments/receipts
 - `positions_WALLET_YEAR.csv` - Position history
 
 #### PDF Reports
+
 - `Austrian_Tax_Report_WALLET_YEAR.pdf` - Complete tax analysis
 - `Ueberweisung_Finanzamt_AT_WALLET_YEAR.pdf` - **Tax form instructions**
 
 #### ZIP Archive
+
 - Complete package with all files for tax submission
 
 ### 🇦🇹 **Austrian Tax Form Instructions**
@@ -54,7 +57,7 @@ The system generates a **Tax Form Guidance PDF** that shows exactly:
 ### 💡 **Key Austrian Tax Rules Applied**
 
 - ✅ **Losses don't reduce salary income** (corrected implementation)
-- ✅ **Only positive trading results are taxable** 
+- ✅ **Only positive trading results are taxable**
 - ✅ **Progressive tax brackets 2025** (0% to 55%)
 - ✅ **FIFO methodology** for position calculations
 - ✅ **Proper German terminology** throughout
@@ -99,7 +102,7 @@ A comprehensive Python application that fetches all your Hyperliquid trading dat
 
 - **Complete Trade History**: Fetches all your trade fills with detailed information
 - **Funding History**: Retrieves funding payments/receipts for all positions
-- **Transfer History**: Gets deposit and withdrawal records  
+- **Transfer History**: Gets deposit and withdrawal records
 - **Open Positions**: Shows current positions with unrealized PnL, leverage, and liquidation prices
 - **Data Export**: Saves data in CSV, JSON, and text summary formats
 - **Clean Summaries**: Generates readable reports with key metrics
@@ -107,20 +110,22 @@ A comprehensive Python application that fetches all your Hyperliquid trading dat
 ## Quick Start 🚀
 
 1. **Install Dependencies**:
+
    ```bash
    pip install -r requirements.txt
    ```
-
 2. **Run the Script**:
+
    ```bash
    python hyperliquid_fetcher.py
    ```
 
-The script is pre-configured with your wallet address: `0x2987F53372c02D1a4C67241aA1840C1E83c480fF`
+The script is pre-configured with your wallet address: `0x343434238412742847278429874d2`
 
 ## What You Get 📈
 
 ### Console Output
+
 - Real-time fetching progress
 - Complete trading summary with:
   - Account value and available balance
@@ -131,8 +136,9 @@ The script is pre-configured with your wallet address: `0x2987F53372c02D1a4C6724
   - Deposit/withdrawal totals
 
 ### Files Generated
+
 - `hyperliquid_trades_[timestamp].csv` - Detailed trade history
-- `hyperliquid_funding_[timestamp].csv` - Funding payments/receipts  
+- `hyperliquid_funding_[timestamp].csv` - Funding payments/receipts
 - `hyperliquid_transfers_[timestamp].csv` - Deposits and withdrawals
 - `hyperliquid_summary_[timestamp].txt` - Human-readable summary report
 - `hyperliquid_raw_data_[timestamp].json` - Complete raw API responses
@@ -140,22 +146,26 @@ The script is pre-configured with your wallet address: `0x2987F53372c02D1a4C6724
 ## Data Included 📋
 
 ### Trade Data
+
 - Timestamp, coin, side (buy/sell), size, price
 - Direction (Open Long, Close Short, etc.)
 - Closed PnL, fees, starting position
 - Transaction hashes and order IDs
 
-### Funding Data  
+### Funding Data
+
 - Funding rates and payments per position
 - Position sizes at funding time
 - Timestamps and transaction hashes
 
 ### Transfer Data
+
 - Deposits, withdrawals, internal transfers
 - Amounts and timestamps
 - Transaction details
 
 ### Account State
+
 - Current account value and margin usage
 - Open positions with:
   - Position size and entry price
@@ -188,6 +198,7 @@ wallet_address = "0xYourWalletAddressHere"
 ## Error Handling 🔧
 
 The script includes robust error handling for:
+
 - Network timeouts and connection issues
 - API rate limiting
 - Invalid responses
