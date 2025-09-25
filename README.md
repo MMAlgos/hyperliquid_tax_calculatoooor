@@ -1,4 +1,97 @@
-# Hyperliquid Tax Calculator 📊
+# 🇦🇹 Austrian Tax Report Generator for Hyperliquid Trading
+
+## ✅ COMPLETE SYSTEM - VERSION 2.0
+
+### 🎯 **Features Implemented**
+
+1. **ECB API Integration** - Real-time EUR/USD conversion with 101 cached exchange rates
+2. **Austrian Tax Law 2025** - Complete progressive tax brackets with corrected loss treatment  
+3. **Separated Tax Display** - Shows Lohn-only vs Trading vs Combined tax calculations
+4. **Tax Form Guidance** - Generates detailed PDF instructions for Austrian Steuererklärung
+5. **User Input System** - Interactive input for wallet, yearly income, and tax year
+6. **Organized Output** - Separate folders for CSV, PDF, and ZIP files
+7. **PDF Reports** - Comprehensive Austrian tax reports with proper terminology
+
+### � **Quick Start**
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the system
+python hyperliquid_fetcher.py
+```
+
+### 📋 **What You'll Enter**
+
+- **Wallet Address**: Your Hyperliquid wallet address (0x...)
+- **Lohn-Einkommen**: Your yearly salary income in EUR (e.g., 50000)
+- **Tax Year**: The year for tax calculation (e.g., 2024)
+
+### �📊 **Generated Files**
+
+#### CSV Files (Raw Data)
+- `trades_WALLET_YEAR.csv` - All trading transactions
+- `funding_WALLET_YEAR.csv` - Funding payments/receipts
+- `positions_WALLET_YEAR.csv` - Position history
+
+#### PDF Reports
+- `Austrian_Tax_Report_WALLET_YEAR.pdf` - Complete tax analysis
+- `Ueberweisung_Finanzamt_AT_WALLET_YEAR.pdf` - **Tax form instructions**
+
+#### ZIP Archive
+- Complete package with all files for tax submission
+
+### 🇦🇹 **Austrian Tax Form Instructions**
+
+The system generates a **Tax Form Guidance PDF** that shows exactly:
+
+1. **Which forms to use**: E1 (main) + E1kv (capital gains)
+2. **Where to enter trading profits**: Specific field references
+3. **How much to transfer**: Exact amount for Finanzamt
+4. **Step-by-step process**: From FinanzOnline login to submission
+
+### 💡 **Key Austrian Tax Rules Applied**
+
+- ✅ **Losses don't reduce salary income** (corrected implementation)
+- ✅ **Only positive trading results are taxable** 
+- ✅ **Progressive tax brackets 2025** (0% to 55%)
+- ✅ **FIFO methodology** for position calculations
+- ✅ **Proper German terminology** throughout
+
+### 🔧 **Technical Details**
+
+- **Currency Conversion**: ECB Statistical Data API with daily rates
+- **Tax Calculations**: Mathematically verified Austrian progressive system
+- **Data Processing**: FIFO-based position tracking
+- **PDF Generation**: ReportLab with professional formatting
+- **Error Handling**: Robust validation and error reporting
+
+### ⚖️ **Legal Compliance**
+
+This system implements Austrian tax law as of 2025. Always consult with a qualified Austrian tax advisor (Steuerberater) for official tax advice.
+
+---
+
+## 🎯 **EXAMPLE TAX CALCULATION OUTPUT**
+
+```
+🇦🇹 ÖSTERREICHISCHE STEUERBERECHNUNG - ERGEBNISSE
+════════════════════════════════════════════════════════════════════════════════
+💰 Lohn-Einkommen (vom Arbeitgeber): €50,000.00
+📊 Trading-Ergebnis (Hyperliquid): €2,532.98
+💸 Steuer nur auf Lohn: €7,950.00
+📈 Steuer mit Trading: €8,963.19
+💡 Zusätzliche Steuer durch Trading: €1,013.19
+
+FÜR STEUERERKLÄRUNG:
+📋 Trading-Gewinn (E1kv eintragen): €2,532.98
+💳 Zusätzlich zu überweisen: €1,013.19
+```
+
+---
+
+**🎉 Ready for Austrian Steuererklärung 2025!**
 
 A comprehensive Python application that fetches all your Hyperliquid trading data including trades, funding history, deposits/withdrawals, and open positions.
 

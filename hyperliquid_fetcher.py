@@ -385,15 +385,18 @@ def create_summary_report(wallet_address: str, trades_df: pd.DataFrame, funding_
     return report
 
 def get_user_input():
-    """Get user input for yearly income and tax year"""
+    """Get user input for wallet address, yearly income and tax year"""
     print("\n" + "═" * 80)
     print("🇦🇹 ÖSTERREICHISCHE STEUERBERECHNUNG - EINGABEN")
     print("═" * 80)
     
+    # Get wallet address
+    wallet_address = input("🔗 Ihre Hyperliquid Wallet-Adresse: ").strip()
+    
     # Get yearly income
     while True:
         try:
-            yearly_income_input = input("💰 Ihr sonstiges Jahreseinkommen in EUR (0 wenn keines): €").strip()
+            yearly_income_input = input("💰 Ihr Lohn-Einkommen in EUR (0 wenn keines): €").strip()
             yearly_income = float(yearly_income_input) if yearly_income_input else 0.0
             if yearly_income >= 0:
                 break
@@ -414,18 +417,17 @@ def get_user_input():
         except ValueError:
             print("❌ Bitte geben Sie eine gültige Jahreszahl ein.")
     
+    print(f"✅ Wallet-Adresse: {wallet_address}")
     print(f"✅ Jahreseinkommen: €{yearly_income:,.2f}")
     print(f"✅ Steuerjahr: {tax_year}")
     
-    return yearly_income, tax_year
+    return wallet_address, yearly_income, tax_year
 
 def main():
     """Main function to run the Hyperliquid data fetcher with EUR conversion"""
     
-    # Get user input for Austrian tax calculation
-    yearly_income, tax_year = get_user_input()
-    
-    wallet_address = "0x2987F53372c02D1a4C67241aA1840C1E83c480fF"
+    # Get user input for wallet address and Austrian tax calculation
+    wallet_address, yearly_income, tax_year = get_user_input()
     
     print("🚀 Starting Hyperliquid Tax Calculator with EUR Support...")
     print(f"📊 Wallet Address: {wallet_address}")
@@ -495,7 +497,68 @@ def main():
         # Create enhanced summary with EUR
         from currency_converter import create_enhanced_summary_report
         summary = create_enhanced_summary_report(wallet_address, trades_df, funding_df, transfers_df, account_state)
+        
+        # Add Austrian tax calculation to CLI output
         print(summary)
+        
+        # Calculate and display tax breakdown in CLI
+        print("\n" + "═" * 80)
+        print("🇦🇹 ÖSTERREICHISCHE STEUERKALKULATION 2025")
+        print("═" * 80)
+        
+        # Create temporary tax calculator for CLI display
+        from austrian_tax_report import AustrianTaxCalculator
+        tax_calc = AustrianTaxCalculator()
+        
+        # Calculate trading income
+        total_realized_pnl_eur = trades_df['closed_pnl_eur'].sum() if not trades_df.empty and 'closed_pnl_eur' in trades_df.columns else 0
+        total_fees_eur = abs(trades_df['fee_eur'].sum()) if not trades_df.empty and 'fee_eur' in trades_df.columns else 0
+        funding_paid_eur = abs(funding_df[funding_df['funding_payment_eur'] < 0]['funding_payment_eur'].sum()) if not funding_df.empty and 'funding_payment_eur' in funding_df.columns else 0
+        funding_received_eur = funding_df[funding_df['funding_payment_eur'] > 0]['funding_payment_eur'].sum() if not funding_df.empty and 'funding_payment_eur' in funding_df.columns else 0
+        
+        # Raw trading result (can be negative)
+        raw_trading_result_eur = total_realized_pnl_eur + funding_received_eur - total_fees_eur - funding_paid_eur
+        
+        # CRITICAL: Taxable profit is capped at 0 for losses (Austrian tax law)
+        taxable_trading_profit_eur = max(0, raw_trading_result_eur)
+        
+        # Total taxable income (base income + only positive trading profits)
+        total_taxable_income_eur = yearly_income + taxable_trading_profit_eur
+        
+        print(f"💰 Lohn-Einkommen: €{yearly_income:,.2f}")
+        print(f" Trading-Gewinn (steuerlich): €{taxable_trading_profit_eur:,.2f}")
+        print(f"🔢 Gesamteinkommen (steuerpflichtig): €{total_taxable_income_eur:,.2f}")
+        
+        # Calculate taxes correctly
+        tax_lohn_only, _ = tax_calc.calculate_progressive_tax(max(0, yearly_income))
+        tax_with_trading, tax_breakdown = tax_calc.calculate_progressive_tax(max(0, total_taxable_income_eur))
+        trading_tax = max(0, tax_with_trading - tax_lohn_only)  # Never negative
+        
+        print(f"\n" + "═" * 80)
+        print("🇦🇹 ÖSTERREICHISCHE STEUERKALKULATION 2025")
+        print("═" * 80)
+        print(f"💸 Steuer nur auf Lohn: €{tax_lohn_only:,.2f}")
+        print(f"💸 Zusatzsteuer durch Trading: €{trading_tax:,.2f}")
+        print(f"💰 Steuer gesamt (Lohn + Trading): €{tax_with_trading:,.2f}")
+        print("─" * 80)
+        print(f"📋 FÜR STEUERERKLÄRUNG:")
+        print(f"💰 Trading-Gewinn (E1kv eintragen): €{taxable_trading_profit_eur:,.2f}")
+        print(f"💸 Zusätzlich zu überweisen: €{trading_tax:,.2f}")
+        print("─" * 80)
+        
+        if raw_trading_result_eur < 0:
+            print(f"ℹ️  Hinweis: Trading-Verluste mindern das Lohn-Einkommen nicht (Deckelung auf 0 €).")
+        
+        print(f"\n💸 DETAILLIERTE STEUERTABELLE {tax_year}:")
+        print("─────────────────────────────────────────────────────────────────────────────────")
+        
+        for bracket in tax_breakdown:
+            if bracket['bracket_income'] > 0:
+                print(f"€{bracket['bracket_income']:,.0f} -> {bracket['rate']*100:.0f}% = €{bracket['bracket_tax']:,.2f}")
+        
+        print("─────────────────────────────────────────────────────────────────────────────────")
+        
+        print("\n")
         
         # Generate Austrian Tax Report
         print("\n" + "═" * 80)

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Tuple, Any
 import pandas as pd
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
@@ -176,28 +176,32 @@ class AustrianTaxReportGenerator:
         funding_paid_eur = abs(funding_df[funding_df['funding_payment_eur'] < 0]['funding_payment_eur'].sum()) if not funding_df.empty and 'funding_payment_eur' in funding_df.columns else 0
         funding_received_eur = funding_df[funding_df['funding_payment_eur'] > 0]['funding_payment_eur'].sum() if not funding_df.empty and 'funding_payment_eur' in funding_df.columns else 0
         
-        # Calculate trading income (Austrian approach)
-        trading_income_eur = total_realized_pnl_eur + funding_received_eur - total_fees_eur - funding_paid_eur
+        # Calculate raw trading result (can be negative)
+        raw_trading_result_eur = total_realized_pnl_eur + funding_received_eur - total_fees_eur - funding_paid_eur
         
-        # Total taxable income including other income
-        total_income_eur = self.yearly_income + trading_income_eur
+        # CRITICAL: Austrian tax law - only profits are taxable, losses don't reduce other income
+        taxable_trading_profit_eur = max(0, raw_trading_result_eur)
         
-        # Calculate taxes
-        tax_without_trading, _ = self.tax_calc.calculate_progressive_tax(max(0, self.yearly_income))
-        tax_with_trading, tax_breakdown = self.tax_calc.calculate_progressive_tax(max(0, total_income_eur))
-        tax_difference = tax_with_trading - tax_without_trading
+        # Total taxable income (base income + only positive trading profits)
+        total_taxable_income_eur = self.yearly_income + taxable_trading_profit_eur
+        
+        # Calculate taxes correctly - separate calculations
+        tax_lohn_only, _ = self.tax_calc.calculate_progressive_tax(max(0, self.yearly_income))
+        tax_with_trading, tax_breakdown = self.tax_calc.calculate_progressive_tax(max(0, total_taxable_income_eur))
+        trading_tax = max(0, tax_with_trading - tax_lohn_only)  # Never negative
         
         return {
             'yearly_income_eur': self.yearly_income,
-            'trading_income_eur': trading_income_eur,
-            'total_income_eur': total_income_eur,
+            'raw_trading_result_eur': raw_trading_result_eur,
+            'taxable_trading_profit_eur': taxable_trading_profit_eur,
+            'total_taxable_income_eur': total_taxable_income_eur,
             'total_realized_pnl_eur': total_realized_pnl_eur,
             'total_fees_eur': total_fees_eur,
             'funding_paid_eur': funding_paid_eur,
             'funding_received_eur': funding_received_eur,
-            'tax_without_trading': tax_without_trading,
+            'tax_lohn_only': tax_lohn_only,
+            'trading_tax': trading_tax,
             'tax_with_trading': tax_with_trading,
-            'tax_difference': tax_difference,
             'tax_breakdown': tax_breakdown
         }
     
@@ -208,9 +212,10 @@ class AustrianTaxReportGenerator:
         summary_data = {
             'metric': [
                 'Tax Year',
-                'Other Income (EUR)',
-                'Trading Income (EUR)',
-                'Total Income (EUR)',
+                'Lohn-Einkommen (EUR)',
+                'Raw Trading Result (EUR)',
+                'Taxable Trading Profit (EUR)', 
+                'Total Taxable Income (EUR)',
                 'Total Trades Count',
                 'Total Realized P&L (EUR)',
                 'Total Trading Fees (EUR)', 
@@ -218,16 +223,17 @@ class AustrianTaxReportGenerator:
                 'Total Funding Received (EUR)',
                 'Total Deposits (EUR)',
                 'Total Withdrawals (EUR)',
-                'Tax without Trading (EUR)',
-                'Tax with Trading (EUR)',
-                'Additional Tax from Trading (EUR)',
+                'Tax Lohn Only (EUR)',
+                'Trading Tax (EUR)',
+                'Total Tax (EUR)',
                 'Effective Tax Rate (%)'
             ],
             'value': [
                 str(self.tax_year),
                 f"{tax_summary['yearly_income_eur']:.4f}",
-                f"{tax_summary['trading_income_eur']:.4f}",
-                f"{tax_summary['total_income_eur']:.4f}",
+                f"{tax_summary['raw_trading_result_eur']:.4f}",
+                f"{tax_summary['taxable_trading_profit_eur']:.4f}",
+                f"{tax_summary['total_taxable_income_eur']:.4f}",
                 len(trades_df) if not trades_df.empty else 0,
                 f"{tax_summary['total_realized_pnl_eur']:.4f}",
                 f"{tax_summary['total_fees_eur']:.4f}",
@@ -235,10 +241,10 @@ class AustrianTaxReportGenerator:
                 f"{tax_summary['funding_received_eur']:.4f}",
                 f"{transfers_df[transfers_df['amount_eur'] > 0]['amount_eur'].sum():.4f}" if not transfers_df.empty and 'amount_eur' in transfers_df.columns else "0.0000",
                 f"{abs(transfers_df[transfers_df['amount_eur'] < 0]['amount_eur'].sum()):.4f}" if not transfers_df.empty and 'amount_eur' in transfers_df.columns else "0.0000",
-                f"{tax_summary['tax_without_trading']:.4f}",
+                f"{tax_summary['tax_lohn_only']:.4f}",
+                f"{tax_summary['trading_tax']:.4f}",
                 f"{tax_summary['tax_with_trading']:.4f}",
-                f"{tax_summary['tax_difference']:.4f}",
-                f"{(tax_summary['tax_difference'] / max(tax_summary['trading_income_eur'], 1) * 100):.2f}"
+                f"{(tax_summary['trading_tax'] / max(tax_summary['taxable_trading_profit_eur'], 1) * 100):.2f}" if tax_summary['taxable_trading_profit_eur'] > 0 else "0.00"
             ]
         }
         
@@ -263,6 +269,109 @@ class AustrianTaxReportGenerator:
             
         return checks
     
+    def generate_tax_form_guidance_pdf(self, tax_summary, filename):
+        """Generate a PDF with specific Austrian tax form guidance for Steuererklärung."""
+        doc = SimpleDocTemplate(filename, pagesize=letter, topMargin=50, bottomMargin=50)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Custom styles
+        title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=16, spaceAfter=20)
+        heading_style = ParagraphStyle('Heading', parent=styles['Heading1'], fontSize=12, spaceAfter=10)
+        section_style = ParagraphStyle('SectionHeading', parent=styles['Heading2'], fontSize=10, spaceAfter=8, textColor=colors.darkblue)
+        normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=9, spaceAfter=6)
+        highlight_style = ParagraphStyle('Highlight', parent=styles['Normal'], fontSize=10, spaceAfter=6, 
+                                       textColor=colors.darkgreen, fontName='Helvetica-Bold')
+        
+        # Header
+        story.append(Paragraph("🇦🇹 ÖSTERREICHISCHE STEUERERKLÄRUNG - ANLEITUNG", title_style))
+        story.append(Paragraph(f"Hyperliquid Trading Report für {self.tax_year}", heading_style))
+        story.append(Paragraph(f"Wallet: {self.wallet_address}", normal_style))
+        story.append(Spacer(1, 20))
+        
+        # Tax amounts summary
+        trading_result = tax_summary.get('trading_result', 0)
+        taxable_profit = max(0, trading_result)  # Only positive results are taxable
+        tax_with_trading = tax_summary.get('tax_with_trading', 0)
+        tax_lohn_only = tax_summary.get('tax_lohn_only', 0)
+        additional_tax = tax_with_trading - tax_lohn_only
+        
+        story.append(Paragraph("📊 BESTEUERUNGSGRUNDLAGE", section_style))
+        story.append(Paragraph(f"• Trading-Ergebnis gesamt: €{trading_result:,.2f}", normal_style))
+        story.append(Paragraph(f"• Zu versteuernder Gewinn: €{taxable_profit:,.2f}", highlight_style))
+        story.append(Paragraph(f"• Zusätzliche Steuer: €{additional_tax:,.2f}", highlight_style))
+        story.append(Spacer(1, 15))
+        
+        # Form E1 - Main income declaration
+        story.append(Paragraph("📋 FORMULAR E1 - EINKOMMENSTEUERERKLÄRUNG", section_style))
+        story.append(Paragraph("Das Formular E1 ist Ihre Hauptsteuererklärung für Einkommen:", normal_style))
+        story.append(Paragraph("• Lohn-Einkommen bereits durch Arbeitgeber versteuert", normal_style))
+        story.append(Paragraph("• Trading-Gewinne sind zusätzlich anzugeben", normal_style))
+        story.append(Spacer(1, 10))
+        
+        # Form E1kv - Capital gains supplement
+        story.append(Paragraph("💰 FORMULAR E1kv - KAPITALERTRÄGE", section_style))
+        story.append(Paragraph("Das Formular E1kv ist speziell für Kapitalerträge und Trading-Gewinne:", normal_style))
+        story.append(Paragraph(f"• Eintrag erforderlich: €{taxable_profit:,.2f}", highlight_style))
+        story.append(Paragraph("• Kategorie: Sonstige Kapitalerträge", normal_style))
+        story.append(Paragraph("• Quellensteuer: 0€ (da internationaler Broker)", normal_style))
+        story.append(Spacer(1, 15))
+        
+        # Step-by-step instructions
+        story.append(Paragraph("📝 SCHRITT-FÜR-SCHRITT ANLEITUNG", section_style))
+        
+        # Step 1
+        story.append(Paragraph("1. FINANZONLINE EINLOGGEN", heading_style))
+        story.append(Paragraph("• Gehen Sie zu finanzonline.bmf.gv.at", normal_style))
+        story.append(Paragraph("• Loggen Sie sich mit Ihren Zugangsdaten ein", normal_style))
+        story.append(Spacer(1, 8))
+        
+        # Step 2
+        story.append(Paragraph("2. STEUERERKLÄRUNG ÖFFNEN", heading_style))
+        story.append(Paragraph(f"• Wählen Sie 'Steuererklärung {self.tax_year}'", normal_style))
+        story.append(Paragraph("• Öffnen Sie das Formular E1", normal_style))
+        story.append(Spacer(1, 8))
+        
+        # Step 3
+        story.append(Paragraph("3. TRADING-GEWINNE EINTRAGEN", heading_style))
+        story.append(Paragraph("• Navigieren Sie zu 'Sonstige Einkünfte'", normal_style))
+        story.append(Paragraph("• Wählen Sie 'Kapitalerträge (E1kv)'", normal_style))
+        story.append(Paragraph(f"• Tragen Sie ein: €{taxable_profit:,.2f}", highlight_style))
+        story.append(Spacer(1, 8))
+        
+        # Step 4
+        story.append(Paragraph("4. BERECHNUNG PRÜFEN", heading_style))
+        story.append(Paragraph("• Das System berechnet automatisch die zusätzliche Steuer", normal_style))
+        story.append(Paragraph(f"• Erwartete zusätzliche Steuer: €{additional_tax:,.2f}", highlight_style))
+        story.append(Spacer(1, 8))
+        
+        # Payment instructions
+        story.append(Paragraph("💳 ÜBERWEISUNG AN FINANZAMT", section_style))
+        if additional_tax > 0:
+            story.append(Paragraph(f"BETRAG: €{additional_tax:,.2f}", highlight_style))
+            story.append(Paragraph("• Empfänger: Finanzamt für Ihren Wohnbezirk", normal_style))
+            story.append(Paragraph("• Verwendungszweck: Steuernummer + 'Nachzahlung EST 2024'", normal_style))
+            story.append(Paragraph("• Zahlbar bis: 30. September des Folgejahres", normal_style))
+        else:
+            story.append(Paragraph("Keine Nachzahlung erforderlich", normal_style))
+        story.append(Spacer(1, 15))
+        
+        # Important notes
+        story.append(Paragraph("⚠️ WICHTIGE HINWEISE", section_style))
+        story.append(Paragraph("• Verluste können das Lohn-Einkommen NICHT reduzieren", normal_style))
+        story.append(Paragraph("• Nur positive Trading-Ergebnisse sind steuerpflichtig", normal_style))
+        story.append(Paragraph("• FIFO-Methode wurde für die Berechnung verwendet", normal_style))
+        story.append(Paragraph("• Bei Fragen wenden Sie sich an Ihren Steuerberater", normal_style))
+        story.append(Spacer(1, 15))
+        
+        # Footer
+        story.append(Paragraph("Generiert am: " + datetime.now().strftime("%d.%m.%Y %H:%M:%S"), 
+                             ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.grey)))
+        
+        # Build PDF
+        doc.build(story)
+        return filename
+    
     def generate_pdf_report(self, csv_data: Dict[str, pd.DataFrame], tax_summary: Dict,
                            plausibility: Dict, account_state: Dict, output_file: str):
         """Generate comprehensive PDF tax report for Austria"""
@@ -280,7 +389,7 @@ class AustrianTaxReportGenerator:
         # Title
         story.append(Paragraph(f"Österreichischer Steuerreport {self.tax_year}", title_style))
         story.append(Paragraph(f"Hyperliquid Trading - Wallet: {self.wallet_address[:10]}...{self.wallet_address[-8:]}", styles['Normal']))
-        story.append(Paragraph(f"Sonstiges Jahreseinkommen: € {self.yearly_income:,.2f}", styles['Normal']))
+        story.append(Paragraph(f"Lohn-Einkommen: € {self.yearly_income:,.2f}", styles['Normal']))
         story.append(Paragraph(f"Erstellt am: {datetime.now(timezone.utc).strftime('%d.%m.%Y %H:%M')} UTC", styles['Normal']))
         story.append(Spacer(1, 20))
         
@@ -289,17 +398,23 @@ class AustrianTaxReportGenerator:
         
         summary_data = [
             ['Kennzahl', 'Betrag (EUR)'],
-            ['Sonstiges Jahreseinkommen', f"€ {tax_summary['yearly_income_eur']:,.2f}"],
-            ['Trading-Einkommen', f"€ {tax_summary['trading_income_eur']:,.2f}"],
-            ['Gesamteinkommen', f"€ {tax_summary['total_income_eur']:,.2f}"],
+            ['Lohn-Einkommen', f"€ {tax_summary['yearly_income_eur']:,.2f}"],
+            ['Trading-Ergebnis (roh)', f"€ {tax_summary['raw_trading_result_eur']:,.2f}"],
+            ['Trading-Gewinn (steuerlich)', f"€ {tax_summary['taxable_trading_profit_eur']:,.2f}"],
+            ['Gesamteinkommen (steuerpflichtig)', f"€ {tax_summary['total_taxable_income_eur']:,.2f}"],
             ['Realisierte Gewinne/Verluste', f"€ {tax_summary['total_realized_pnl_eur']:,.2f}"],
             ['Trading-Gebühren (abzugsfähig)', f"€ {tax_summary['total_fees_eur']:,.2f}"],
             ['Funding Paid (abzugsfähig)', f"€ {tax_summary['funding_paid_eur']:,.2f}"],
             ['Funding Received (Ertrag)', f"€ {tax_summary['funding_received_eur']:,.2f}"],
-            ['Steuer ohne Trading', f"€ {tax_summary['tax_without_trading']:,.2f}"],
-            ['Steuer mit Trading', f"€ {tax_summary['tax_with_trading']:,.2f}"],
-            ['Zusätzliche Steuer durch Trading', f"€ {tax_summary['tax_difference']:,.2f}"]
+            ['', ''],  # Separator
+            ['Steuer nur auf Lohn', f"€ {tax_summary['tax_lohn_only']:,.2f}"],
+            ['Zusatzsteuer durch Trading', f"€ {tax_summary['trading_tax']:,.2f}"],
+            ['Steuer gesamt (Lohn + Trading)', f"€ {tax_summary['tax_with_trading']:,.2f}"]
         ]
+        
+        # Add note for losses if applicable
+        if tax_summary['raw_trading_result_eur'] < 0:
+            summary_data.append(['Hinweis', f"Trading-Verlust mindert Lohn-Einkommen nicht"])
         
         summary_table = Table(summary_data)
         summary_table.setStyle(TableStyle([
@@ -366,8 +481,9 @@ class AustrianTaxReportGenerator:
         • Keine Behaltefrist mehr - alle realisierten Gewinne sind sofort steuerpflichtig
         • Progressive Einkommensteuer (0% bis 55% je nach Gesamteinkommen)
         • Trading-Verluste können mit anderen Einkünften verrechnet werden
-        • Funding-Zahlungen: Paid = Betriebsausgabe, Received = steuerpflichtiger Ertrag
-        • Alle Gebühren sind als Betriebsausgaben abzugsfähig
+        • Trading Fees und Funding Paid = abzugsfähig; Funding Received = steuerpflichtiger Ertrag
+        • Deposits sind nicht steuerpflichtig; Withdrawals sind kein Einkommen
+        • Nur realisierte PnL ist steuerpflichtig (unrealisierte PnL = Info)
         """
         story.append(Paragraph(tax_treatment_text, styles['Normal']))
         story.append(Spacer(1, 20))
@@ -513,6 +629,10 @@ class AustrianTaxReportGenerator:
         
         # Generate PDF in PDF folder
         self.generate_pdf_report(csv_data, tax_summary, plausibility, account_state, pdf_filename)
+        
+        # Generate Tax Form Guidance PDF
+        tax_form_pdf = os.path.join(folders['pdf'], f"Ueberweisung_Finanzamt_AT_{self.wallet_address[:8]}_{self.tax_year}_{vienna_time}.pdf")
+        self.generate_tax_form_guidance_pdf(tax_summary, tax_form_pdf)
         
         # Create ZIP package
         with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
