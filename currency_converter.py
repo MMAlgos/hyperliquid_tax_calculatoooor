@@ -143,8 +143,8 @@ class CurrencyConverter:
         
         for df in df_list:
             if not df.empty and 'timestamp' in df.columns:
-                # Extract dates from timestamps
-                dates = pd.to_datetime(df['timestamp']).dt.date.astype(str).unique()
+                # Extract dates from timestamps (handle both "YYYY-MM-DD HH:MM:SS" and "YYYY-MM-DD HH:MM:SS UTC")
+                dates = pd.to_datetime(df['timestamp'], format='mixed', utc=True).dt.date.astype(str).unique()
                 all_dates.update(dates)
         
         # Ensure we have rates for all dates
@@ -158,8 +158,8 @@ class CurrencyConverter:
         
         df_copy = df.copy()
         
-        # Add exchange rate column
-        df_copy['date'] = pd.to_datetime(df_copy['timestamp']).dt.date.astype(str)
+        # Add exchange rate column (handle both timestamp formats)
+        df_copy['date'] = pd.to_datetime(df_copy['timestamp'], format='mixed', utc=True).dt.date.astype(str)
         
         def get_rate_with_fallback(date_str):
             """Get rate with fallback logic"""

@@ -6,12 +6,14 @@ Converts USD amounts to EUR using ECB exchange rates for German tax reporting
 
 import requests
 import json
+import os
 import pandas as pd
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 import time
 from currency_converter import CurrencyConverter, create_enhanced_summary_report
 from austrian_tax_report import AustrianTaxReportGenerator
+from manual_input_handler import ManualInputHandler
 
 class HyperliquidFetcher:
     """Class to fetch and process Hyperliquid trading data"""
@@ -92,7 +94,7 @@ class HyperliquidFetcher:
         seen_hashes = set()
         unique_fills = []
         for fill in reversed(all_fills):  # Reverse to keep most recent duplicates
-            tx_hash = fill.get('tx', {}).get('hash', '')
+            tx_hash = fill.get('hash', '')
             if tx_hash and tx_hash not in seen_hashes:
                 seen_hashes.add(tx_hash)
                 unique_fills.append(fill)
@@ -485,18 +487,6 @@ def get_user_input():
     # Get wallet address
     wallet_address = input("🔗 Ihre Hyperliquid Wallet-Adresse: ").strip()
     
-    # Get yearly income
-    while True:
-        try:
-            yearly_income_input = input("💰 Ihr Lohn-Einkommen in EUR (0 wenn keines): €").strip()
-            yearly_income = float(yearly_income_input) if yearly_income_input else 0.0
-            if yearly_income >= 0:
-                break
-            else:
-                print("❌ Bitte geben Sie einen positiven Betrag ein.")
-        except ValueError:
-            print("❌ Bitte geben Sie eine gültige Zahl ein.")
-    
     # Get tax year
     while True:
         try:
@@ -510,16 +500,22 @@ def get_user_input():
             print("❌ Bitte geben Sie eine gültige Jahreszahl ein.")
     
     print(f"✅ Wallet-Adresse: {wallet_address}")
-    print(f"✅ Jahreseinkommen: €{yearly_income:,.2f}")
+    print(f"💰 Einkommen wird aus CSV geladen (monthly_income.csv)")
     print(f"✅ Steuerjahr: {tax_year}")
     
-    return wallet_address, yearly_income, tax_year
+    return wallet_address, tax_year
+
+
+# ============================================================================
+# MANUAL INPUT: Now handled via CSV files - see manual_input_handler.py
+# Templates are auto-generated in manual_input/ folder on first run
+# ============================================================================
 
 def main():
     """Main function to run the Hyperliquid data fetcher with EUR conversion"""
     
     # Get user input for wallet address and Austrian tax calculation
-    wallet_address, yearly_income, tax_year = get_user_input()
+    wallet_address, tax_year = get_user_input()
     
     print("🚀 Starting Hyperliquid Tax Calculator with EUR Support...")
     print(f"📊 Wallet Address: {wallet_address}")
@@ -530,6 +526,21 @@ def main():
     fetcher = HyperliquidFetcher(wallet_address)
     processor = HyperliquidDataProcessor()
     converter = CurrencyConverter()
+    
+    # Initialize manual input handler
+    manual_handler = ManualInputHandler()
+    
+    # Load monthly income from CSV (default approach)
+    try:
+        yearly_income = manual_handler.read_monthly_income(tax_year)
+        if yearly_income is not None:
+            print(f"✅ Jahreseinkommen aus monatlichen Angaben geladen: €{yearly_income:,.2f}")
+        else:
+            print("⚠️ Keine monatlichen Einkommen gefunden. Verwende Standardeinkommen 0.00 EUR")
+            yearly_income = 0.0
+    except FileNotFoundError:
+        print("⚠️ monthly_income.csv nicht gefunden. Verwende Standardeinkommen 0.00 EUR")
+        yearly_income = 0.0
     
     # Fetch all data
     try:
@@ -551,6 +562,42 @@ def main():
         
         # Get open orders
         open_orders = fetcher.get_open_orders()
+        
+        # Initialize Manual Input Handler (already done above, remove duplicate)
+        # manual_handler = ManualInputHandler()
+        
+        # Check if manual input folder exists, if not create templates
+        if not os.path.exists(manual_handler.manual_input_folder):
+            print("\n" + "═" * 80)
+            print("🆕 ERSTMALIGER START - MANUAL INPUT SYSTEM WIRD EINGERICHTET")
+            print("═" * 80)
+            manual_handler.generate_template_csvs()
+            manual_handler.print_instructions()
+        
+        # Read manual inputs from CSV files
+        print("\n" + "═" * 80)
+        print("📂 LADE MANUELLE EINTRÄGE AUS CSV-DATEIEN...")
+        print("═" * 80)
+        
+        manual_deposits_df = manual_handler.read_manual_deposits()
+        manual_trades_df = manual_handler.read_manual_trades()
+        
+        # Merge manual entries with fetched data
+        if not manual_trades_df.empty:
+            # Ensure timestamp is string for both dataframes
+            if not trades_df.empty:
+                trades_df['timestamp'] = trades_df['timestamp'].astype(str)
+            trades_df = pd.concat([trades_df, manual_trades_df], ignore_index=True)
+            trades_df = trades_df.sort_values('timestamp').reset_index(drop=True)
+            print(f"✅ {len(manual_trades_df)} manuelle Trade(s) hinzugefügt")
+        
+        if not manual_deposits_df.empty:
+            # Ensure timestamp is string for both dataframes
+            if not transfers_df.empty:
+                transfers_df['timestamp'] = transfers_df['timestamp'].astype(str)
+            transfers_df = pd.concat([transfers_df, manual_deposits_df], ignore_index=True)
+            transfers_df = transfers_df.sort_values('timestamp').reset_index(drop=True)
+            print(f"✅ {len(manual_deposits_df)} manuelle Einzahlung(en) hinzugefügt")
         
         print("\n" + "═" * 80)
         print("💱 CONVERTING USD TO EUR...")
